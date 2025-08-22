@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SVG Man Game with Separate Food and Hurdles, Score to Win</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #a0d8f0; /* Sky blue */
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding-top: 10px;
+  }
+  #gameCanvas {
+    background: #654321; /* Brown road */
+    display: block;
+    margin: 0 auto;
+    border: 2px solid #333;
+  }
+  button {
+    margin: 10px 5px;
+    padding: 10px 20px;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  #timer, #score, #message {
+    font-size: 20px;
+    font-weight: bold;
+    margin-top: 5px;
+    color: white;
+    text-shadow: 1px 1px 2px black;
+  }
+  #message {
+    color: #00ff00;
+    font-size: 22px;
+    height: 26px;
+  }
+</style>
+</head>
+<body>
+
+<svg id="gameCanvas" width="600" height="200" aria-label="Jumping game">
+  <rect id="ground" y="160" width="600" height="40" fill="#654321"/>
+  <!-- Man -->
+  <g id="man" fill="blue" transform="translate(50,110)">
+    <circle cx="15" cy="15" r="15" /> <!-- head -->
+    <rect x="0" y="30" width="30" height="50" /> <!-- body -->
+  </g>
+  <!-- Hurdles and food will be appended here -->
+</svg>
+
+<div>
+  <button id="startButton">Start Game</button>
+  <button id="jumpButton" disabled>Jump</button>
+</div>
+
+<div id="timer">Time: 0s</div>
+<div id="score">Score: 0</div>
+<div id="message"></div>
+
+<script>
+const svg = document.getElementById('gameCanvas');
+const man = document.getElementById('man');
+const jumpButton = document.getElementById('jumpButton');
+const startButton = document.getElementById('startButton');
+const timerDisplay = document.getElementById('timer');
+const scoreDisplay = document.getElementById('score');
+const messageDisplay = document.getElementById('message');
+
+const groundY = 160;
+const manWidth = 30;
+const manHeight = 80; // head + body
+
+let jumping = false;
+let vy = 0;
+const gravity = 0.8;
+const jumpSpeed = -15;
+
+let manPosY = 110; // initial vertical position
+
+const hurdles = [];
+const foods = [];
+const hurdleWidth = 20;
+const hurdleHeight = 40;
+const hurdleSpeed = 4;
+
+const foodSize = 20;
+const foodSpeed = hurdleSpeed;
+
+let gameOver = false;
+let gameWon = false;
+let startTime = 0;
+
+let score = 0;
+const maxScore = 10;
+
+let lastHurdleTime = 0;
+let lastFoodTime = 0;
+const hurdleInterval = 1500;
+const foodInterval = 2000;
+
+let gameRunning = false;
+
+// Utility to create SVG elements
+function createSVGElement(tag, attrs) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (let key in attrs) {
+    el.setAttribute(key, attrs[key]);
+  }
+  return el;
+}
+
+// Generate random Y positions for hurdle and food so they don't overlap
+// hurdle near ground, food a bit higher to avoid overlap
+function getHurdleY() {
+  return groundY - hurdleHeight; // fixed on ground level
+}
+
+function getFoodY() {
+  // Food position randomly between groundY-60 and groundY-30
+  return groundY - (30 + Math.random() * 30);
+}
+
+function createHurdle() {
+  if (!gameRunning) return;
+
+  const hurdle = createSVGElement("rect", {
+    width: hurdleWidth,
+    height: hurdleHeight,
+    fill: "green",
+    x: svg.clientWidth,
+    y: getHurdleY()
+  });
+  svg.appendChild(hurdle);
+  hurdles.push(hurdle);
+}
+
+function createFood() {
+  if (!gameRunning) return;
+
+  const food = createSVGElement("circle", {
+    r: foodSize / 2,
+    fill: "orange",
+    cx: svg.clientWidth + foodSize,
+    cy: getFoodY()
+  });
+  svg.appendChild(food);
+  foods.push(food);
+}
+
+function updateHurdles() {
+  if (!gameRunning) return;
+
+  hurdles.forEach((hurdle, index) => {
+    let currentX = parseFloat(hurdle.getAttribute("x"));
+    currentX -= hurdleSpeed;
+    hurdle.setAttribute("x", currentX);
+
+    if(currentX + hurdleWidth < 0) {
+      svg.removeChild(hurdle);
+      hurdles.splice(index, 1);
+    }
+  });
+}
+
+function updateFoods() {
+  if (!gameRunning) return;
+
+  foods.forEach((food, index) => {
+    let currentX = parseFloat(food.getAttribute("cx"));
+    currentX -= foodSpeed;
+    food.setAttribute("cx", currentX);
+
+    if(currentX + foodSize / 2 < 0) {
+      svg.removeChild(food);
+      foods.splice(index, 1);
+    }
+  });
+}
+
+function checkCollision() {
+  const manX = 50;
+  const manY = manPosY;
+  const manHeadCircle = {cx: 65, cy: manY + 15, r: 15};
+  const manBodyRect = {x: manX, y: manY + 30, width: manWidth, height: 50};
+
+  // Check hurdle collision
+  for(let hurdle of hurdles) {
+    const hX = parseFloat(hurdle.getAttribute("x"));
+    const hY = parseFloat(hurdle.getAttribute("y"));
+    const hW = parseFloat(hurdle.getAttribute("width"));
+    const hH = parseFloat(hurdle.getAttribute("height"));
+
+    if (!((manBodyRect.x + manBodyRect.width < hX) ||
+          (manBodyRect.x > hX + hW) ||
+          (manBodyRect.y + manBodyRect.height < hY) ||
+          (manBodyRect.y > hY))) {
+      return {hit: 'hurdle'};
+    }
+
+    let closestX = Math.max(hX, Math.min(manHeadCircle.cx, hX + hW));
+    let closestY = Math.max(hY, Math.min(manHeadCircle.cy, hY + hH));
+    let dx = manHeadCircle.cx - closestX;
+    let dy = manHeadCircle.cy - closestY;
+    if((dx * dx + dy * dy) < (manHeadCircle.r * manHeadCircle.r)) {
+      return {hit: 'hurdle'};
+    }
+  }
+
+  // Check food collision
+  for(let i = 0; i < foods.length; i++) {
+    const food = foods[i];
+    const fX = parseFloat(food.getAttribute("cx"));
+    const fY = parseFloat(food.getAttribute("cy"));
+    const fR = parseFloat(food.getAttribute("r"));
+
+    // Distance between food and man head center
+    let dist = Math.sqrt((fX - manHeadCircle.cx) ** 2 + (fY - manHeadCircle.cy) ** 2);
+
+    if (dist < fR + manHeadCircle.r) {
+      // Remove food from svg and array
+      svg.removeChild(food);
+      foods.splice(i, 1);
+      return {hit: 'food'};
+    }
+  }
+
+  return {hit: false};
+}
+
+function updateMan() {
+  if (!gameRunning) return;
+
+  vy += gravity;
+  manPosY += vy;
+
+  if(manPosY > groundY - manHeight) {
+    manPosY = groundY - manHeight;
+    vy = 0;
+    jumping = false;
+  }
+
+  man.setAttribute("transform", `translate(50,${manPosY})`);
+}
+
+function jump() {
+  if (!jumping && !gameOver && !gameWon && gameRunning) {
+    vy = jumpSpeed;
+    jumping = true;
+  }
+}
+
+function showMessage(text) {
+  messageDisplay.textContent = text;
+  setTimeout(() => {
+    if (messageDisplay.textContent === text) {
+      messageDisplay.textContent = '';
+    }
+  }, 1000);
+}
+
+function drawStatus() {
+  if(gameOver) {
+    alert("Game Over! Reload the page to try again.");
+    gameRunning = false;
+    jumpButton.disabled = true;
+    startButton.disabled = false;
+  } else if(gameWon) {
+    alert(`Congratulations! You won with score: ${score}!`);
+    gameRunning = false;
+    jumpButton.disabled = true;
+    startButton.disabled = false;
+  }
+}
+
+function updateTimer() {
+  if (!gameRunning) return;
+
+  const elapsed = Date.now() - startTime;
+  const seconds = Math.floor(elapsed / 1000);
+  timerDisplay.textContent = `Time: ${seconds}s`;
+}
+
+function gameLoop() {
+  if (!gameRunning) return;
+
+  if(Date.now() - lastHurdleTime > hurdleInterval) {
+    createHurdle();
+    lastHurdleTime = Date.now();
+  }
+  if(Date.now() - lastFoodTime > foodInterval) {
+    createFood();
+    lastFoodTime = Date.now();
+  }
+
+  updateHurdles();
+  updateFoods();
+  updateMan();
+  updateTimer();
+
+  const collision = checkCollision();
+
+  if (collision.hit === 'hurdle') {
+    gameOver = true;
+  } else if (collision.hit === 'food') {
+    score++;
+    scoreDisplay.textContent = `Score: ${score}`;
+    showMessage("Good Food!");
+    if (score >= maxScore) {
+      gameWon = true;
+    }
+  }
+
+  drawStatus();
+
+  if(gameRunning) {
+    requestAnimationFrame(gameLoop);
+  }
+}
+
+startButton.addEventListener('click', () => {
+  if (!gameRunning) {
+    gameRunning = true;
+    gameOver = false;
+    gameWon = false;
+    startTime = Date.now();
+    lastHurdleTime = 0;
+    lastFoodTime = 0;
+    manPosY = groundY - manHeight;
+    vy = 0;
+    jumping = false;
+    score = 0;
+
+    // Remove any existing hurdles and food
+    hurdles.forEach(h => svg.removeChild(h));
+    hurdles.length = 0;
+    foods.forEach(f => svg.removeChild(f));
+    foods.length = 0;
+
+    jumpButton.disabled = false;
+    startButton.disabled = true;
+    timerDisplay.textContent = 'Time: 0s';
+    scoreDisplay.textContent = 'Score: 0';
+    messageDisplay.textContent = '';
+
+    gameLoop();
+  }
+});
+
+jumpButton.addEventListener('click', jump);
+
+window.addEventListener('keydown', function(e) {
+  if((e.code === 'Space' || e.code === 'ArrowUp')) {
+    jump();
+  }
+});
+</script>
+
+</body>
+</html>
