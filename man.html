@@ -380,4 +380,54 @@ window.addEventListener('keydown', function(e) {
 </script>
 
 </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Loading Page with Custom GIF</title>
+  <style>
+    /* Full screen loader container */
+    #loading-page {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: white; /* or any background */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  
+  <!-- Loading page with custom GIF -->
+  <div id="loading-page">
+    <img src="https://lottie.host/cf71b003-6b57-40d5-a7ff-ec3b287ceb20/cLncKFZl3X.lottie" alt="Loading..." />
+  </div>
+
+  <!-- Your main page content -->
+  <div id="main-content" style="display:none;">
+    <h1>Welcome to the Game!</h1>
+    <p>Eat food to get total 10 score to win!</p>
+  </div>
+
+  <script>
+    // Simulate loading process, then hide loader and show content
+    window.addEventListener('load', function() {
+      const loader = document.getElementById('loading-page');
+      const mainContent = document.getElementById('main-content');
+
+      // Hide loader and show main content
+      loader.style.display = 'none';
+      mainContent.style.display = 'block';
+    });
+  </script>
+  
+</body>
+</html>
+
 </html>
