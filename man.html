@@ -249,8 +249,29 @@ function jump() {
   if (!jumping && !gameOver && !gameWon && gameRunning) {
     vy = jumpSpeed;
     jumping = true;
+    playBeep();
   }
 }
+function playBeep() {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.type = 'square'; // type of sound wave
+      oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // frequency in Hz (A4 note)
+      
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // volume
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.start();
+
+      setTimeout(() => {
+        oscillator.stop();
+        audioCtx.close();
+      }, 200); // beep duration in milliseconds (200ms)
+    }
 
 function showMessage(text) {
   messageDisplay.textContent = text;
